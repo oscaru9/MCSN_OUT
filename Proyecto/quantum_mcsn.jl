@@ -7,7 +7,7 @@ using LinearAlgebra
 
 export random_state, projector, apply_unitary
 export apply_unitary!, partial_trace
-export I, X, Y, Z, sigmas, sigma
+export I, X, Y, Z, sigmas, sigma, Ising
 
 @doc "Función para connvertir una lista de bits a un número entero."
 function original_integer(list)
