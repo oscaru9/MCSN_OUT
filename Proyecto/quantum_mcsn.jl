@@ -85,7 +85,7 @@ function apply_unitary(state::Vector{T}, U, target) where T
     target_dim= 2^n_t
     unt_dim= Int(length(state)/target_dim)
     for j in 0:unt_dim-1
-        pos=[merge_two_integers(target, i, j,n) + 1 for i in 0:1]
+        pos=[merge_two_integers(target, i, j,n) + 1 for i in 0:target_dim-1]
         new_state[pos]=U*state[pos]
     end
     return new_state
@@ -120,7 +120,7 @@ function apply_unitary!(state::Vector{T}, U, target) where T
     target_dim= 2^n_t
     unt_dim= Int(length(state)/target_dim)
     for j in 0:unt_dim-1
-        pos=[merge_two_integers(target, i, j,n) + 1 for i in 0:1]
+        pos=[merge_two_integers(target, i, j,n) + 1 for i in 0:target_dim-1]
         state[pos]=U*state[pos]
     end
     
@@ -200,5 +200,23 @@ function sigma(indice, pos, n)
     end
     return kron(list ...)
 end
+
+function Ising(n, b, J; cerrada=false)
+    if cerrada==false
+        m=n-1
+       
+    elseif cerrada==true
+        m=n
+        
+    end
+   
+
+    H=-sum([J*sigma(3, mod(i, n+1), n)*sigma(3,mod(i+1, n+1), n) for i in 1:m]) + b*sum([sigma(1, i, n) for i in 1:n])
+
+    
+    return H
+    
+end
+
 
 end
