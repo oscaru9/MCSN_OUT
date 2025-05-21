@@ -6,8 +6,9 @@ module quantum
 using LinearAlgebra 
 
 export random_state, projector, apply_unitary
-export apply_unitary!, partial_trace
+export apply_unitary!, partial_trace, apply_pauli_channel, apply_pauli_channel!, Pauli_channel
 export I, X, Y, Z, sigmas, sigma, Ising
+export H, CNOT, S, T, base_2, merge_two_integers
 
 @doc "Función para connvertir una lista de bits a un número entero."
 function original_integer(list)
@@ -76,66 +77,126 @@ end
 
 
     La función regresa el nuevo estado cuántico."
-function apply_unitary(state::Vector{T}, U, target) where T
-    n=Int(log2(length(state)))
-    new_state = zeros(ComplexF64, size(state))
-
-    bit_mask = base_2(target)
-    n_t= count(x->x==1, bit_mask)
-    target_dim= 2^n_t
-    unt_dim= Int(length(state)/target_dim)
-    for j in 0:unt_dim-1
-        pos=[merge_two_integers(target, i, j,n) + 1 for i in 0:target_dim-1]
-        new_state[pos]=U*state[pos]
+    function apply_unitary(state::Vector{T}, U, target; threads::Bool=false) where T
+        apply_unitary(state, U, target, Val(threads))
     end
-    return new_state
+    
+    function apply_unitary(state::Vector{T}, U, target, ::Val{false}) where T
+        n = Int(log2(length(state)))
+        new_state = zeros(ComplexF64, size(state))
+    
+        
+        target_dim = size(U, 1)
+        unt_dim = Int(length(state) / target_dim)
+    
+        for j in 0:(unt_dim - 1)
+            pos = [merge_two_integers(target, i, j, n) + 1 for i in 0:1]
+            new_state[pos] = U * state[pos]
+        end
+        return new_state
+    end
+    
+    function apply_unitary(state::Vector{T}, U, target, ::Val{true}) where T
+        
+        n = Int(log2(length(state)))
+        new_state = zeros(ComplexF64, size(state))
+    
+      
+        target_dim = size(U, 1)
+        unt_dim = Int(length(state) / target_dim)
+    
+        Threads.@threads for j in 0:(unt_dim - 1)
+            pos = [merge_two_integers(target, i, j, n) + 1 for i in 0:1]
+            new_state[pos] = U * state[pos]
+        end
+        return new_state
+    end
+
+    function apply_unitary(state::Matrix{T}, U, target; threads::Bool=false) where T
+        apply_unitary(state, U, target, Val(threads))
+    end
+    
+    function apply_unitary(state::Matrix{T}, U, target, ::Val{false}) where T
+        n = Int(log2(size(state, 1)))
+        new_state = zeros(ComplexF64, size(state))
+    
+        
+        target_dim= size(U, 1)
+        unt_dim_j= Int(size(state, 1)/target_dim)
+        unt_dim_k= Int(size(state, 2)/target_dim)
+        
+        for j in 0:unt_dim_j-1
+            for k in 0:unt_dim_k-1
+                pos_j=[merge_two_integers(target, i, j, n) + 1 for i in 0:target_dim-1]
+                pos_k=[merge_two_integers(target, i, k, n) + 1 for i in 0:target_dim-1]
+                new_state[pos_j, pos_k]= U*state[pos_j, pos_k]*U'
+            end
+        end
+        return new_state
+    end
+    
+    function apply_unitary(state::Matrix{T}, U, target, ::Val{true}) where T
+        
+        n = Int(log2(size(state, 1)))
+        new_state = zeros(ComplexF64, size(state))
+    
+      
+        target_dim= size(U, 1)
+        unt_dim_j= Int(size(state, 1)/target_dim)
+        unt_dim_k= Int(size(state, 2)/target_dim)
+        
+        Threads.@threads for j in 0:unt_dim_j-1
+            for k in 0:unt_dim_k-1
+                pos_j=[merge_two_integers(target, i, j, n) + 1 for i in 0:target_dim-1]
+                pos_k=[merge_two_integers(target, i, k, n) + 1 for i in 0:target_dim-1]
+                new_state[pos_j, pos_k]= U*state[pos_j, pos_k]*U'
+            end
+        end
+        return new_state
+    end
+
+function apply_unitary!(state::Vector{T}, U, target; threads::Bool=false) where T
+    apply_unitary!(state, U, target, Val(threads))
 end
 
-function apply_unitary(state::Matrix{T}, U, target) where T
-    new_state = zeros(ComplexF64, size(state))
-    n=Int(log2(size(state, 1)))
-
-    bit_mask= base_2(target)
-    n_t=count(x->x==1, bit_mask)
+function apply_unitary!(state::Vector{T}, U, target, ::Val{false}) where T
+    n = Int(log2(length(state)))
     
-    target_dim= 2^n_t
+    target_dim = size(U, 1)
+    unt_dim = Int(length(state) / target_dim)
+
+    for j in 0:(unt_dim - 1)
+        pos = [merge_two_integers(target, i, j, n) + 1 for i in 0:target_dim-1]
+        state[pos] = U * state[pos]
+    end
+    
+end
+
+function apply_unitary!(state::Vector{T}, U, target, ::Val{true}) where T
+    
+    n = Int(log2(length(state)))
+    
+
+  
+    target_dim = size(U, 1)
+    unt_dim = Int(length(state) / target_dim)
+
+    Threads.@threads for j in 0:(unt_dim - 1)
+        pos = [merge_two_integers(target, i, j, n) + 1 for i in 0:target_dim-1]
+        state[pos] = U * state[pos]
+    end
+
+end
+
+function apply_unitary!(state::Matrix{T}, U, target; threads::Bool=false) where T
+    apply_unitary!(state, U, target, Val(threads))
+end
+function apply_unitary!(state::Matrix{T}, U, target, ::Val{false}) where T
+    n = Int(log2(size(state, 1)))
+    
+    target_dim= size(U, 1)
     unt_dim_j= Int(size(state, 1)/target_dim)
     unt_dim_k= Int(size(state, 2)/target_dim)
-    
-    for j in 0:unt_dim_j-1
-        for k in 0:unt_dim_k-1
-            pos_j=[merge_two_integers(target, i, j, n) + 1 for i in 0:target_dim-1]
-            pos_k=[merge_two_integers(target, i, k, n) + 1 for i in 0:target_dim-1]
-            new_state[pos_j, pos_k]= U*state[pos_j, pos_k]*U'
-        end
-    end
-    return new_state
-end
-
-function apply_unitary!(state::Vector{T}, U, target) where T
-    n=Int(log2(length(state)))
-    
-    bit_mask = base_2(target)
-    n_t= count(x->x==1, bit_mask)
-    target_dim= 2^n_t
-    unt_dim= Int(length(state)/target_dim)
-    for j in 0:unt_dim-1
-        pos=[merge_two_integers(target, i, j,n) + 1 for i in 0:target_dim-1]
-        state[pos]=U*state[pos]
-    end
-    
-end
-
-function apply_unitary!(state::Matrix{T}, U, target) where T
-    
-    n=Int(log2(size(state, 1)))
-
-    bit_mask= base_2(target)
-    n_t=count(x->x==1, bit_mask)
-    
-    target_dim= 2^n_t
-    unt_dim_j= Int(size(rho, 1)/target_dim)
-    unt_dim_k= Int(size(rho, 2)/target_dim)
     
     for j in 0:unt_dim_j-1
         for k in 0:unt_dim_k-1
@@ -147,38 +208,135 @@ function apply_unitary!(state::Matrix{T}, U, target) where T
     
 end
 
+function apply_unitary!(state::Matrix{T}, U, target, ::Val{true}) where T
+    
+    n = Int(log2(size(state, 1)))
+    
+    target_dim= size(U, 1)
+    unt_dim_j= Int(size(state, 1)/target_dim)
+    unt_dim_k= Int(size(state, 2)/target_dim)
+    
+    Threads.@threads for j in 0:unt_dim_j-1
+        for k in 0:unt_dim_k-1
+            pos_j=[merge_two_integers(target, i, j, n) + 1 for i in 0:target_dim-1]
+            pos_k=[merge_two_integers(target, i, k, n) + 1 for i in 0:target_dim-1]
+            state[pos_j, pos_k]= U*state[pos_j, pos_k]*U'
+        end
+    end
+
+end
+
 @doc "Función para calcular la traza parcial de un estado cuántico. 
 
     El argumento target indica cuáles qubits no van a ser trazados. Si target= 1, [0,0, 1] indica que 
     se va a trazar sobre el subespacio del segundo y tercer qubit."
-function partial_trace(state::Matrix{T}, target) where T
-    n=Int(log2(size(state, 1)))
-    bit_mask = base_2(target)
-    n_t= count(x->x==1, bit_mask)
-
-    target_dim=2^n_t
-    n_unt= n-n_t
-    unt_dim= 2^n_unt
-
-    new_state = zeros(ComplexF64, target_dim, target_dim)
-    for  i in 0:target_dim-1
-        for j in 0:target_dim-1
-            for k in 0:unt_dim-1
-                pos_i=merge_two_integers(target, i, k, n) + 1 
-                pos_j=merge_two_integers(target, j, k, n) + 1 
-                new_state[i+1, j+1] += state[pos_i, pos_j]
-
+    function partial_trace(state::Matrix{T}, target; threads::Bool=false) where T
+        partial_trace(state, target, Val(threads))
+    end
+    
+    function partial_trace(state::Matrix{T}, target, ::Val{false}) where T
+        n = Int(log2(size(state, 1)))
+        bit_mask = base_2(target)
+        n_t = count(x -> x == 1, bit_mask)
+    
+        target_dim = 2^n_t
+        n_unt = n - n_t
+        unt_dim = 2^n_unt
+    
+        new_state = zeros(ComplexF64, target_dim, target_dim)
+        for i in 0:(target_dim - 1)
+            for j in 0:(target_dim - 1)
+                for k in 0:(unt_dim - 1)
+                    pos_i = merge_two_integers(target, i, k, n) + 1
+                    pos_j = merge_two_integers(target, j, k, n) + 1
+                    new_state[i+1, j+1] += state[pos_i, pos_j]
+                end
             end
         end
+        return new_state
     end
-    return new_state
-end
+    
+    function partial_trace(state::Matrix{T}, target, ::Val{true}) where T
+        n = Int(log2(size(state, 1)))
+        bit_mask = base_2(target)
+        n_t = count(x -> x == 1, bit_mask)
+    
+        target_dim = 2^n_t
+        n_unt = n - n_t
+        unt_dim = 2^n_unt
+    
+        new_state = zeros(ComplexF64, target_dim, target_dim)
+        Threads.@threads for i in 0:(target_dim - 1)
+            for j in 0:(target_dim - 1)
+                for k in 0:(unt_dim - 1)
+                    pos_i = merge_two_integers(target, i, k, n) + 1
+                    pos_j = merge_two_integers(target, j, k, n) + 1
+                    new_state[i+1, j+1] += state[pos_i, pos_j]
+                end
+            end
+        end
+        return new_state
+    end
+
+    function partial_trace(state::Vector{T}, target; threads::Bool=false) where T
+        partial_trace(state, target, Val(threads))
+    end
+    
+    function partial_trace(state::Vector{T}, target, ::Val{false}) where T
+        n = Int(log2(length(state)))
+        bit_mask = base_2(target)
+        n_t = count(x -> x == 1, bit_mask)
+    
+        target_dim = 2^n_t
+        n_unt = n - n_t
+        unt_dim = 2^n_unt
+    
+        new_state = zeros(ComplexF64, target_dim, target_dim)
+        for i in 0:(target_dim - 1)
+            for j in 0:(target_dim - 1)
+                for k in 0:(unt_dim - 1)
+                    pos_i = merge_two_integers(target, i, k, n) + 1
+                    pos_j = merge_two_integers(target, j, k, n) + 1
+                    new_state[i+1, j+1] += state[pos_i] * state[pos_j]'
+                end
+            end
+        end
+        return new_state
+    end
+    
+    function partial_trace(state::Vector{T}, target, ::Val{true}) where T
+        n = Int(log2(length(state)))
+        bit_mask = base_2(target)
+        n_t = count(x -> x == 1, bit_mask)
+    
+        target_dim = 2^n_t
+        n_unt = n - n_t
+        unt_dim = 2^n_unt
+    
+        new_state = zeros(ComplexF64, target_dim, target_dim)
+        Threads.@threads for i in 0:(target_dim - 1)
+            for j in 0:(target_dim - 1)
+                for k in 0:(unt_dim - 1)
+                    pos_i = merge_two_integers(target, i, k, n) + 1
+                    pos_j = merge_two_integers(target, j, k, n) + 1
+                    new_state[i+1, j+1] += state[pos_i] * state[pos_j]'
+                end
+            end
+        end
+        return new_state
+    end
+
 
 
 I=[ 1.0 0.0; 0.0 1.0]
 X=[0.0 1.0; 1.0 0.0]
 Y=[0.0 -1.0im; 1.0im 0.0]
 Z=[1.0 0.0; 0.0 -1.0]
+H=[1.0 1.0; 1.0 -1.0]/sqrt(2)
+CNOT=[1.0 0.0 0.0 0.0; 0.0 1.0 0.0 0.0; 0.0 0.0 0.0 1.0; 0.0 0.0 1.0 0.0]
+S=[1.0 0.0; 0.0 1.0im]
+T=[1.0 0.0; 0.0 exp(1.0im*π/4)]
+
 
 @doc "Diccionario de matrices sigma. 
     1: Pauli-X, 2: Pauli-Y, 3: Pauli-Z, 0: Identidad."
@@ -217,6 +375,98 @@ function Ising(n, b, J; cerrada=false)
     return H
     
 end
+
+function Pauli_channel(px, py, pz, state)
+    new_state = zeros(ComplexF64, size(state))
+
+    new_state = px*X*state*X + py*Y*state*Y + pz*Z*state*Z + (1-px-py-pz)*state
+    return new_state
+end
+function apply_pauli_channel(state::Matrix{T}, px, py, pz, target; threads::Bool=false) where T
+    apply_pauli_channel(state, channel, px, py, pz, target, Val(threads))
+end
+
+function apply_pauli_channel(state::Matrix{T}, px, py, pz, target, ::Val{false}) where T
+    new_state = zeros(ComplexF64, size(state))
+    n = Int(log2(size(state, 1)))
+    bit_mask = base_2(target)
+    n_t = count(x -> x == 1, bit_mask)
+
+    target_dim = 2^n_t
+    unt_dim_j = Int(size(state, 1) / target_dim)
+    unt_dim_k = Int(size(state, 2) / target_dim)
+
+    for j in 0:(unt_dim_j - 1)
+        for k in 0:(unt_dim_k - 1)
+            pos_j = [merge_two_integers(target, i, j, n) + 1 for i in 0:(target_dim - 1)]
+            pos_k = [merge_two_integers(target, i, k, n) + 1 for i in 0:(target_dim - 1)]
+            new_state[pos_j, pos_k] = Pauli_channel(px, py, pz, state[pos_j, pos_k])
+        end
+    end
+    return new_state
+end
+
+function apply_pauli_channel(state::Matrix{T}, px, py, pz, target, ::Val{true}) where T
+    new_state = zeros(ComplexF64, size(state))
+    n = Int(log2(size(state, 1)))
+    bit_mask = base_2(target)
+    n_t = count(x -> x == 1, bit_mask)
+
+    target_dim = 2^n_t
+    unt_dim_j = Int(size(state, 1) / target_dim)
+    unt_dim_k = Int(size(state, 2) / target_dim)
+
+    Threads.@threads for j in 0:(unt_dim_j - 1)
+        for k in 0:(unt_dim_k - 1)
+            pos_j = [merge_two_integers(target, i, j, n) + 1 for i in 0:(target_dim - 1)]
+            pos_k = [merge_two_integers(target, i, k, n) + 1 for i in 0:(target_dim - 1)]
+            new_state[pos_j, pos_k] = Pauli_channel(px, py, pz, state[pos_j, pos_k])
+        end
+    end
+    return new_state
+end
+
+function apply_pauli_channel!(state::Matrix{T}, px, py, pz, target; threads::Bool=false) where T
+    apply_pauli_channel!(state, px, py, pz, target, Val(threads))
+end
+
+function apply_pauli_channel!(state::Matrix{T}, px, py, pz, target, ::Val{false}) where T
+    n = Int(log2(size(state, 1)))
+    bit_mask = base_2(target)
+    n_t = count(x -> x == 1, bit_mask)
+    
+    target_dim = 2^n_t
+    unt_dim_j = Int(size(state, 1) / target_dim)
+    unt_dim_k = Int(size(state, 2) / target_dim)
+    
+    for j in 0:(unt_dim_j - 1)
+        for k in 0:(unt_dim_k - 1)
+            pos_j = [merge_two_integers(target, i, j, n) + 1 for i in 0:(target_dim - 1)]
+            pos_k = [merge_two_integers(target, i, k, n) + 1 for i in 0:(target_dim - 1)]
+            state[pos_j, pos_k] = Pauli_channel(px, py, pz, state[pos_j, pos_k])
+        end
+    end
+end
+
+function apply_pauli_channel!(state::Matrix{T}, channel, px, py, pz, target, ::Val{true}) where T
+    n = Int(log2(size(state, 1)))
+    bit_mask = base_2(target)
+    n_t = count(x -> x == 1, bit_mask)
+    
+    target_dim = 2^n_t
+    unt_dim_j = Int(size(state, 1) / target_dim)
+    unt_dim_k = Int(size(state, 2) / target_dim)
+    
+    Threads.@threads for j in 0:(unt_dim_j - 1)
+        for k in 0:(unt_dim_k - 1)
+            pos_j = [merge_two_integers(target, i, j, n) + 1 for i in 0:(target_dim - 1)]
+            pos_k = [merge_two_integers(target, i, k, n) + 1 for i in 0:(target_dim - 1)]
+            state[pos_j, pos_k] = Pauli_channel(px, py, pz, state[pos_j, pos_k])
+        end
+    end
+end
+
+
 
 
 end
